@@ -1,7 +1,6 @@
 import os
-import json
 import openai
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import speech_recognition as sr
 from gtts import gTTS
 from pydub import AudioSegment
@@ -15,7 +14,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.route('/')
 def home():
-    return "Speech Recognition AI is Running!"
+    return render_template('index.html')
 
 @app.route('/ask', methods=['POST'])
 def ask_openai():
@@ -31,16 +30,16 @@ def ask_openai():
         
         with audio_data as source:
             print("Listening...")
-            recognizer.adjust_for_ambient_noise(source)  # Adjust for ambient noise
+            recognizer.adjust_for_ambient_noise(source)
             audio = recognizer.record(source)
             user_input = recognizer.recognize_google(audio)
             print(f"You asked: {user_input}")
 
         # OpenAI API call
         response = openai.Completion.create(
-            engine="text-davinci-003",  # Model to use
-            prompt=user_input,          # Query from the user
-            max_tokens=150              # Limit on response length
+            engine="text-davinci-003",
+            prompt=user_input,
+            max_tokens=150
         )
 
         # Extract the text from the OpenAI API response
@@ -69,7 +68,5 @@ def ask_openai():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    # Get the port from Render environment variable, default to 5000
     port = int(os.environ.get('PORT', 5000))
-    # Run the app on all available IP addresses ('0.0.0.0') and the selected port
     app.run(host='0.0.0.0', port=port)
