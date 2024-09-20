@@ -5,54 +5,124 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voice Assistant</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; }
-        button { padding: 10px 20px; font-size: 16px; }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+        }
+        #startButton {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        #startButton:hover {
+            background-color: #218838;
+        }
+        #status {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        #log {
+            margin-top: 20px;
+            background: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-height: 300px;
+            overflow-y: auto;
+            text-align: left;
+        }
+        #audioResponse {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <h1>Voice Assistant</h1>
-    <button id="recordButton">Start Listening</button>
-    <audio id="audioPlayback" controls></audio>
-    <script>
-        let mediaRecorder;
-        let audioChunks = [];
+    <button id="startButton">Start Listening</button>
+    <div id="status">Status: Idle</div>
+    <div id="log"></div>
+    <audio id="audioResponse" controls></audio>
 
-        document.getElementById('recordButton').onclick = async () => {
-            if (!mediaRecorder) {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
-                
-                mediaRecorder.ondataavailable = (event) => {
+    <script>
+        const startButton = document.getElementById('startButton');
+        const statusLabel = document.getElementById('status');
+        const logDiv = document.getElementById('log');
+        const audioResponse = document.getElementById('audioResponse');
+
+        startButton.addEventListener('click', async () => {
+            log('OBOT is listening...');
+            statusLabel.innerText = "Status: Listening...";
+            const audioBlob = await recordAudio();
+            sendAudio(audioBlob);
+        });
+
+        async function recordAudio() {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            const audioChunks = [];
+
+            mediaRecorder.start();
+
+            return new Promise((resolve) => {
+                mediaRecorder.ondataavailable = event => {
                     audioChunks.push(event.data);
                 };
 
-                mediaRecorder.onstop = async () => {
+                mediaRecorder.onstop = () => {
                     const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                    const formData = new FormData();
-                    formData.append('audio', audioBlob);
-
-                    const response = await fetch('/ask', {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    const data = await response.json();
-                    console.log(data.response); // Log the AI response
-
-                    // Play the recorded audio
-                    const audio = new Audio(URL.createObjectURL(audioBlob));
-                    audio.play();
-                    document.getElementById('audioPlayback').src = URL.createObjectURL(audioBlob);
+                    resolve(audioBlob);
                 };
 
-                mediaRecorder.start();
-                document.getElementById('recordButton').innerText = 'Stop Listening';
-            } else {
-                mediaRecorder.stop();
-                mediaRecorder = null;
-                document.getElementById('recordButton').innerText = 'Start Listening';
+                setTimeout(() => {
+                    mediaRecorder.stop();
+                }, 3000); // Record for 3 seconds
+            });
+        }
+
+        async function sendAudio(audioBlob) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'audio.wav');
+
+            try {
+                const response = await fetch('/ask', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    audioResponse.src = URL.createObjectURL(new Blob([result.audio], { type: 'audio/wav' }));
+                    audioResponse.style.display = 'block';
+                    audioResponse.play();
+                    log(`OBOT: ${result.response}`);
+                    log('OBOT is listening...');
+                    statusLabel.innerText = "Status: Listening...";
+                    sendAudio(audioBlob); // Continue listening
+                } else {
+                    log(`Error: ${result.error}`);
+                    statusLabel.innerText = "Status: Error - " + result.error;
+                }
+            } catch (error) {
+                log(`AJAX Error: ${error.message}`);
+                statusLabel.innerText = "Status: Error - AJAX Error";
             }
-        };
+        }
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `<p>[${timestamp}] ${message}</p>`;
+            logDiv.scrollTop = logDiv.scrollHeight; // Auto-scroll to the bottom
+        }
     </script>
 </body>
 </html>
