@@ -58,53 +58,54 @@
         const statusLabel = document.getElementById('status');
         const logDiv = document.getElementById('log');
         const audioResponse = document.getElementById('audioResponse');
-
+    
         startButton.addEventListener('click', async () => {
             log('OBOT is listening...');
             statusLabel.innerText = "Status: Listening...";
             const audioBlob = await recordAudio();
             sendAudio(audioBlob);
         });
-
+    
         async function recordAudio() {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
+            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
             const audioChunks = [];
-
+    
             mediaRecorder.start();
-
+    
             return new Promise((resolve) => {
                 mediaRecorder.ondataavailable = event => {
                     audioChunks.push(event.data);
                 };
-
+    
                 mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     resolve(audioBlob);
                 };
-
+    
                 setTimeout(() => {
                     mediaRecorder.stop();
                 }, 3000); // Record for 3 seconds
             });
         }
-
+    
         async function sendAudio(audioBlob) {
             const formData = new FormData();
-            formData.append('audio', audioBlob, 'audio.wav');
-
+            formData.append('audio', audioBlob, 'audio.webm');
+    
             try {
                 const response = await fetch('/ask', {
                     method: 'POST',
                     body: formData,
                 });
-
+    
                 const result = await response.json();
                 if (response.ok) {
                     audioResponse.src = URL.createObjectURL(new Blob([result.audio], { type: 'audio/wav' }));
                     audioResponse.style.display = 'block';
                     audioResponse.play();
-                    log(`OBOT: ${result.response}`);
+                    log(`You said: ${result.user_input}`);  // Log the user's input
+                    log(`OBOT: ${result.response}`);  // Log the AI's response
                     log('OBOT is listening...');
                     statusLabel.innerText = "Status: Listening...";
                     sendAudio(audioBlob); // Continue listening
@@ -117,12 +118,13 @@
                 statusLabel.innerText = "Status: Error - AJAX Error";
             }
         }
-
+    
         function log(message) {
             const timestamp = new Date().toLocaleTimeString();
             logDiv.innerHTML += `<p>[${timestamp}] ${message}</p>`;
             logDiv.scrollTop = logDiv.scrollHeight; // Auto-scroll to the bottom
         }
     </script>
+    
 </body>
 </html>
