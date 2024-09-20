@@ -7,7 +7,7 @@ from gtts import gTTS
 from pydub import AudioSegment
 from io import BytesIO
 import threading
-import winsound  # For Windows sound playback
+import pygame  # Use pygame for audio playback
 
 # Initialize Flask app
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -25,15 +25,21 @@ class VoiceAssistantApp:
 
         self.recognizer = sr.Recognizer()
         self.microphone = sr.Microphone()
+        self.listening = False  # Flag to manage microphone access
+
+        # Initialize pygame
+        pygame.mixer.init()
 
     def start_listening(self):
-        self.status_label.config(text="Status: Listening...")
-        threading.Thread(target=self.listen).start()
+        if not self.listening:
+            self.listening = True
+            self.status_label.config(text="Status: Listening...")
+            threading.Thread(target=self.listen).start()
 
     def listen(self):
         with self.microphone as source:
             self.recognizer.adjust_for_ambient_noise(source)  # Adjust for ambient noise
-            while True:
+            while self.listening:
                 try:
                     audio = self.recognizer.listen(source, timeout=5)  # Listen for audio
                     user_input = self.recognizer.recognize_google(audio)
@@ -72,8 +78,11 @@ class VoiceAssistantApp:
             audio_segment.export(output_io, format="wav")
             output_io.seek(0)
 
-            # Play the response
-            winsound.PlaySound(output_io.getvalue(), winsound.SND_MEMORY)
+            # Play the response using pygame
+            pygame.mixer.music.load(output_io)
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():  # Wait for playback to finish
+                continue
 
         except Exception as e:
             messagebox.showerror("Error", str(e))
