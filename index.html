@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Assistant</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        button { padding: 10px 20px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>Voice Assistant</h1>
+    <button id="recordButton">Start Listening</button>
+    <audio id="audioPlayback" controls></audio>
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+
+        document.getElementById('recordButton').onclick = async () => {
+            if (!mediaRecorder) {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const formData = new FormData();
+                    formData.append('audio', audioBlob);
+
+                    const response = await fetch('/ask', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+                    console.log(data.response); // Log the AI response
+
+                    // Play the recorded audio
+                    const audio = new Audio(URL.createObjectURL(audioBlob));
+                    audio.play();
+                    document.getElementById('audioPlayback').src = URL.createObjectURL(audioBlob);
+                };
+
+                mediaRecorder.start();
+                document.getElementById('recordButton').innerText = 'Stop Listening';
+            } else {
+                mediaRecorder.stop();
+                mediaRecorder = null;
+                document.getElementById('recordButton').innerText = 'Start Listening';
+            }
+        };
+    </script>
+</body>
+</html>
