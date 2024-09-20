@@ -1,6 +1,11 @@
 import os
-from flask import Flask, request, jsonify
+import json
 import openai
+from flask import Flask, request, jsonify
+import speech_recognition as sr
+from gtts import gTTS
+from pydub import AudioSegment
+from io import BytesIO
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -15,12 +20,21 @@ def home():
 @app.route('/ask', methods=['POST'])
 def ask_openai():
     try:
-        # Get the query from the request data
-        data = request.json
-        user_input = data.get('query', '')
-
-        if not user_input:
-            return jsonify({'error': 'No query provided.'}), 400
+        # Get the audio file from the request
+        audio_file = request.files.get('audio')
+        if not audio_file:
+            return jsonify({'error': 'No audio file provided.'}), 400
+        
+        # Convert audio file to text
+        recognizer = sr.Recognizer()
+        audio_data = sr.AudioFile(audio_file)
+        
+        with audio_data as source:
+            print("Listening...")
+            recognizer.adjust_for_ambient_noise(source)  # Adjust for ambient noise
+            audio = recognizer.record(source)
+            user_input = recognizer.recognize_google(audio)
+            print(f"You asked: {user_input}")
 
         # OpenAI API call
         response = openai.Completion.create(
@@ -31,9 +45,25 @@ def ask_openai():
 
         # Extract the text from the OpenAI API response
         ai_reply = response.choices[0].text.strip()
+        print(f"AI response: {ai_reply}")
 
-        # Return the AI's response as JSON
-        return jsonify({'response': ai_reply})
+        # Text to speech response
+        tts = gTTS(text=f"You asked {user_input}. Thinking... {ai_reply}", lang='en')
+        audio_output = BytesIO()
+        tts.save(audio_output)
+        audio_output.seek(0)
+
+        # Convert to wav format for sending back
+        audio_segment = AudioSegment.from_file(audio_output, format="mp3")
+        output_io = BytesIO()
+        audio_segment.export(output_io, format="wav")
+        output_io.seek(0)
+
+        # Return the AI's response as JSON and audio file
+        return jsonify({'response': ai_reply}), 200, {
+            'Content-Type': 'audio/wav',
+            'Content-Disposition': 'attachment; filename="response.wav"'
+        }, output_io.getvalue()
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
