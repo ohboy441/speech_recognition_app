@@ -1,72 +1,84 @@
 import os
 import openai
-from flask import Flask, request, jsonify, send_from_directory
+import tkinter as tk
+from tkinter import messagebox
 import speech_recognition as sr
 from gtts import gTTS
 from pydub import AudioSegment
 from io import BytesIO
+import threading
+import winsound  # For Windows sound playback
 
 # Initialize Flask app
-app = Flask(__name__)
-
-# Set OpenAI API key from environment variable
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-@app.route('/')
-def home():
-    return send_from_directory('.', 'index.html')
-
-@app.route('/ask', methods=['POST'])
-def ask_openai():
-    try:
-        # Get the audio file from the request
-        audio_file = request.files.get('audio')
-        if not audio_file:
-            return jsonify({'error': 'No audio file provided.'}), 400
+class VoiceAssistantApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Voice Assistant")
         
-        # Convert audio file to text
-        recognizer = sr.Recognizer()
-        audio_data = sr.AudioFile(audio_file)
-        
-        with audio_data as source:
-            print("Listening...")
-            recognizer.adjust_for_ambient_noise(source)
-            audio = recognizer.record(source)
-            user_input = recognizer.recognize_google(audio)
-            print(f"You asked: {user_input}")
+        self.start_button = tk.Button(root, text="Start Listening", command=self.start_listening)
+        self.start_button.pack(pady=20)
 
-        # OpenAI API call
-        response = openai.Completion.create(
-            engine="text-davinci-003",
-            prompt=user_input,
-            max_tokens=150
-        )
+        self.status_label = tk.Label(root, text="Status: Idle")
+        self.status_label.pack(pady=20)
 
-        # Extract the text from the OpenAI API response
-        ai_reply = response.choices[0].text.strip()
-        print(f"AI response: {ai_reply}")
+        self.recognizer = sr.Recognizer()
+        self.microphone = sr.Microphone()
 
-        # Text to speech response
-        tts = gTTS(text=f"You asked {user_input}. Thinking... {ai_reply}", lang='en')
-        audio_output = BytesIO()
-        tts.save(audio_output)
-        audio_output.seek(0)
+    def start_listening(self):
+        self.status_label.config(text="Status: Listening...")
+        threading.Thread(target=self.listen).start()
 
-        # Convert to wav format for sending back
-        audio_segment = AudioSegment.from_file(audio_output, format="mp3")
-        output_io = BytesIO()
-        audio_segment.export(output_io, format="wav")
-        output_io.seek(0)
+    def listen(self):
+        with self.microphone as source:
+            self.recognizer.adjust_for_ambient_noise(source)  # Adjust for ambient noise
+            while True:
+                try:
+                    audio = self.recognizer.listen(source, timeout=5)  # Listen for audio
+                    user_input = self.recognizer.recognize_google(audio)
+                    print(f"You asked: {user_input}")
+                    self.process_query(user_input)
+                except sr.WaitTimeoutError:
+                    continue  # Timeout waiting for audio, just keep listening
+                except sr.UnknownValueError:
+                    continue  # Ignore unrecognized speech
+                except Exception as e:
+                    messagebox.showerror("Error", str(e))
+                    break
 
-        # Return the AI's response as JSON and audio file
-        return jsonify({'response': ai_reply}), 200, {
-            'Content-Type': 'audio/wav',
-            'Content-Disposition': 'attachment; filename="response.wav"'
-        }, output_io.getvalue()
+    def process_query(self, user_input):
+        try:
+            # OpenAI API call
+            response = openai.Completion.create(
+                engine="text-davinci-003",
+                prompt=user_input,
+                max_tokens=150
+            )
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+            # Extract the text from the OpenAI API response
+            ai_reply = response.choices[0].text.strip()
+            print(f"AI response: {ai_reply}")
+
+            # Text to speech response
+            tts = gTTS(text=f"You asked {user_input}. Thinking... {ai_reply}", lang='en')
+            audio_output = BytesIO()
+            tts.save(audio_output)
+            audio_output.seek(0)
+
+            # Convert to wav format for playback
+            audio_segment = AudioSegment.from_file(audio_output, format="mp3")
+            output_io = BytesIO()
+            audio_segment.export(output_io, format="wav")
+            output_io.seek(0)
+
+            # Play the response
+            winsound.PlaySound(output_io.getvalue(), winsound.SND_MEMORY)
+
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    root = tk.Tk()
+    app = VoiceAssistantApp(root)
+    root.mainloop()
