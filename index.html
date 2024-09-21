@@ -3,128 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voice Assistant</title>
+    <title>BotBoy!!! - Your AI Assistant</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Arial', sans-serif;
             background-color: #f4f4f4;
             margin: 0;
-            padding: 20px;
-            text-align: center;
+            padding: 0;
         }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            margin: 50px auto;
+            text-align: center;
+            background: #fff;
+            padding: 20px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        }
+
         h1 {
+            font-size: 24px;
             color: #333;
         }
-        #startButton {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            border-radius: 5px;
-        }
-        #startButton:hover {
-            background-color: #218838;
-        }
-        #status {
-            margin-top: 20px;
-            font-weight: bold;
-        }
-        #log {
-            margin-top: 20px;
-            background: #fff;
-            padding: 15px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            max-height: 300px;
+
+        #chat-box {
+            height: 300px;
             overflow-y: auto;
+            background: #f9f9f9;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+        }
+
+        #messages {
             text-align: left;
         }
-        #audioResponse {
+
+        #input-box {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 60px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        #loading {
+            color: #007bff;
+            font-size: 18px;
+            display: none;
+        }
+
+        .hidden {
             display: none;
         }
     </style>
 </head>
 <body>
-    <h1>Voice Assistant</h1>
-    <button id="startButton">Start Listening</button>
-    <div id="status">Status: Idle</div>
-    <div id="log"></div>
-    <audio id="audioResponse" controls></audio>
+    <div class="container">
+        <h1>Hi, BotBoy!!! is here to help you, ask me anything...</h1>
+
+        <div id="chat-box">
+            <div id="messages"></div>
+            <div id="loading">⏳ Loading...</div>
+        </div>
+
+        <div id="input-box">
+            <textarea id="user-input" placeholder="Type your question here..."></textarea>
+            <button id="send-btn">Ask BotBoy!!!</button>
+        </div>
+    </div>
 
     <script>
-        const startButton = document.getElementById('startButton');
-        const statusLabel = document.getElementById('status');
-        const logDiv = document.getElementById('log');
-        const audioResponse = document.getElementById('audioResponse');
-    
-        startButton.addEventListener('click', async () => {
-            log('OBOT is listening...');
-            statusLabel.innerText = "Status: Listening...";
-            const audioBlob = await recordAudio();
-            sendAudio(audioBlob);
-        });
-    
-        async function recordAudio() {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-            const audioChunks = [];
-    
-            mediaRecorder.start();
-    
-            return new Promise((resolve) => {
-                mediaRecorder.ondataavailable = event => {
-                    audioChunks.push(event.data);
-                };
-    
-                mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    resolve(audioBlob);
-                };
-    
-                setTimeout(() => {
-                    mediaRecorder.stop();
-                }, 3000); // Record for 3 seconds
-            });
-        }
-    
-        async function sendAudio(audioBlob) {
-            const formData = new FormData();
-            formData.append('audio', audioBlob, 'audio.webm');
-    
+        document.getElementById('send-btn').addEventListener('click', async () => {
+            const userInput = document.getElementById('user-input').value.trim();
+            if (!userInput) return;
+
+            appendMessage(`You: ${userInput}`, 'user');
+            toggleLoading(true);
+
             try {
                 const response = await fetch('/ask', {
                     method: 'POST',
-                    body: formData,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: userInput })
                 });
-    
-                const result = await response.json();
-                if (response.ok) {
-                    audioResponse.src = URL.createObjectURL(new Blob([result.audio], { type: 'audio/wav' }));
-                    audioResponse.style.display = 'block';
-                    audioResponse.play();
-                    log(`You said: ${result.user_input}`);  // Log the user's input
-                    log(`OBOT: ${result.response}`);  // Log the AI's response
-                    log('OBOT is listening...');
-                    statusLabel.innerText = "Status: Listening...";
-                    sendAudio(audioBlob); // Continue listening
-                } else {
-                    log(`Error: ${result.error}`);
-                    statusLabel.innerText = "Status: Error - " + result.error;
-                }
+
+                const data = await response.json();
+                const botResponse = data.response;
+
+                appendMessage(`BotBoy!!!: ${botResponse}`, 'bot');
             } catch (error) {
-                log(`AJAX Error: ${error.message}`);
-                statusLabel.innerText = "Status: Error - AJAX Error";
+                appendMessage(`Error: Unable to get a response.`, 'error');
+            } finally {
+                toggleLoading(false);
+                document.getElementById('user-input').value = '';
             }
+        });
+
+        function appendMessage(message, sender) {
+            const messagesDiv = document.getElementById('messages');
+            const newMessage = document.createElement('div');
+            newMessage.classList.add(sender);
+            newMessage.textContent = message;
+            messagesDiv.appendChild(newMessage);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll
         }
-    
-        function log(message) {
-            const timestamp = new Date().toLocaleTimeString();
-            logDiv.innerHTML += `<p>[${timestamp}] ${message}</p>`;
-            logDiv.scrollTop = logDiv.scrollHeight; // Auto-scroll to the bottom
+
+        function toggleLoading(show) {
+            const loadingDiv = document.getElementById('loading');
+            loadingDiv.style.display = show ? 'block' : 'none';
         }
     </script>
-    
 </body>
 </html>
